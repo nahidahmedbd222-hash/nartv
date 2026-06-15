@@ -1,0 +1,6 @@
+{
+  "name": "Root IT TV",
+  "description": "An Android application for streaming TV content from tv.rootitsystem.com with a robust built-in ad blocker.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
