@@ -91,6 +91,68 @@ fun MainScreen() {
     var desktopModeEnabled by remember { mutableStateOf(appSettings.desktopModeEnabled) }
     var customBlockedDomains by remember { mutableStateOf(appSettings.customBlockedDomains) }
     var themeAccentIndex by remember { mutableStateOf(appSettings.themeAccentIndex) }
+    var fullscreenModeEnabled by remember { mutableStateOf(appSettings.fullscreenModeEnabled) }
+    var rootAccessEnabled by remember { mutableStateOf(appSettings.rootAccessEnabled) }
+    var rootCloakEnabled by remember { mutableStateOf(appSettings.rootCloakEnabled) }
+
+    // Detected system root state
+    val isSystemRooted = remember {
+        val paths = arrayOf(
+            "/system/app/Superuser.apk",
+            "/sbin/su",
+            "/system/bin/su",
+            "/system/xbin/su",
+            "/data/local/xbin/su",
+            "/data/local/bin/su",
+            "/system/sd/xbin/su",
+            "/system/bin/failsafe/su",
+            "/data/local/su"
+        )
+        var rooted = false
+        for (path in paths) {
+            if (java.io.File(path).exists()) {
+                rooted = true
+                break
+            }
+        }
+        if (!rooted) {
+            val buildTags = android.os.Build.TAGS
+            if (buildTags != null && buildTags.contains("test-keys")) {
+                rooted = true
+            }
+        }
+        if (!rooted) {
+            try {
+                val process = Runtime.getRuntime().exec(arrayOf("which", "su"))
+                val reader = java.io.BufferedReader(java.io.InputStreamReader(process.inputStream))
+                if (reader.readLine() != null) {
+                    rooted = true
+                }
+            } catch (t: Throwable) {
+                // Safe catch
+            }
+        }
+        rooted
+    }
+
+    // Terminal command history & execution state
+    var terminalCommandInput by remember { mutableStateOf("") }
+    val terminalOutputLines = remember { mutableStateListOf<String>("Root/SU Utilities System v1.0.", "Device reported: ${if (isSystemRooted) "Rooted! (su binaries found)" else "Non-Rooted (Secure Sandbox)"}") }
+
+    // Apply Fullscreen Immersive System UI Mode
+    LaunchedEffect(fullscreenModeEnabled) {
+        val activity = context as? ComponentActivity
+        val window = activity?.window
+        if (window != null) {
+            val controller = androidx.core.view.WindowInsetsControllerCompat(window, window.decorView)
+            if (fullscreenModeEnabled) {
+                controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                controller.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            } else {
+                controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
 
     // Active block tracker
     var blockedCount by remember { mutableStateOf(0) }
@@ -295,6 +357,66 @@ fun MainScreen() {
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 10.sp,
                                         color = if (adBlockEnabled) activeAccentColor else Color(0xFFFF4D4D)
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(4.dp))
+
+                                // Quick Immersion/Fullscreen badge
+                                Row(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(
+                                            if (fullscreenModeEnabled) activeAccentColor.copy(alpha = 0.2f)
+                                             else Color.White.copy(alpha = 0.08f)
+                                        )
+                                        .clickable {
+                                            fullscreenModeEnabled = !fullscreenModeEnabled
+                                            appSettings.fullscreenModeEnabled = fullscreenModeEnabled
+                                        }
+                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = if (fullscreenModeEnabled) Icons.Default.CheckCircle else Icons.Default.Settings,
+                                        contentDescription = "Toggle Immersive Fullscreen Mode",
+                                        tint = if (fullscreenModeEnabled) activeAccentColor else Color.White,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (fullscreenModeEnabled) "Immersive" else "Windowed",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 10.sp,
+                                        color = if (fullscreenModeEnabled) activeAccentColor else Color.White
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(4.dp))
+
+                                // Root Status Badge
+                                Row(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(
+                                            if (isSystemRooted) Color(0xFFFFD600).copy(alpha = 0.15f)
+                                            else Color.White.copy(alpha = 0.04f)
+                                        )
+                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = if (isSystemRooted) Icons.Default.Star else Icons.Default.CheckCircle,
+                                        contentDescription = "Root System Status Badge",
+                                        tint = if (isSystemRooted) Color(0xFFFFD600) else Color.Gray,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (isSystemRooted) "Rooted" else "Secure",
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 10.sp,
+                                        color = if (isSystemRooted) Color(0xFFFFD600) else Color.Gray
                                     )
                                 }
 
@@ -581,6 +703,27 @@ fun MainScreen() {
                                         // Inject JS blocker scripts
                                         if (adBlockEnabled) {
                                             view?.evaluateJavascript(AdBlocker.JS_BLOCK_INJECTION, null)
+                                            if (rootCloakEnabled) {
+                                                val rootCloakJS = """
+                                                    (function() {
+                                                        try {
+                                                            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                                                            Object.defineProperty(navigator, 'platform', { get: () => 'Linux armv8l' });
+                                                            window.androidRootDetected = false;
+                                                            window.isRooted = false;
+                                                            window.cordova = undefined;
+                                                            if (window.navigator) {
+                                                                window.navigator.su = undefined;
+                                                                window.navigator.root = false;
+                                                            }
+                                                            console.log("RootIT TV Shield: Cloaking root state from provider scripts.");
+                                                        } catch (e) {
+                                                            console.error(e);
+                                                        }
+                                                    })();
+                                                """.trimIndent()
+                                                view?.evaluateJavascript(rootCloakJS, null)
+                                            }
                                             val cssScript = """
                                                 (function() {
                                                     var style = document.createElement('style');
@@ -627,6 +770,54 @@ fun MainScreen() {
                         },
                         modifier = Modifier.fillMaxSize()
                     )
+                }
+            }
+
+            // Floating Quick Restore from Immersive Fullscreen
+            if (fullscreenModeEnabled) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.BottomEnd
+                ) {
+                    Card(
+                        modifier = Modifier
+                            .testTag("exit_immersive_button")
+                            .clip(CircleShape)
+                            .clickable {
+                                fullscreenModeEnabled = false
+                                appSettings.fullscreenModeEnabled = false
+                            },
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFF111115).copy(alpha = 0.7f)
+                        ),
+                        shape = CircleShape,
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier.padding(12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Exit Immersive",
+                                    tint = activeAccentColor,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Exit Immersive",
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(end = 4.dp)
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
@@ -811,6 +1002,257 @@ fun MainScreen() {
                                         uncheckedTrackColor = Color.DarkGray
                                     )
                                 )
+                            }
+                        }
+
+                        // New: Fullscreen Immersive Mode Switch
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color.White.copy(alpha = 0.04f))
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "True Immersive Fullscreen",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        text = "Hide system status and navigation bars for absolute cinema display.",
+                                        fontSize = 11.sp,
+                                        color = Color.Gray
+                                    )
+                                }
+                                Switch(
+                                    checked = fullscreenModeEnabled,
+                                    onCheckedChange = {
+                                        fullscreenModeEnabled = it
+                                        appSettings.fullscreenModeEnabled = it
+                                    },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = activeAccentColor,
+                                        checkedTrackColor = activeAccentColor.copy(alpha = 0.4f),
+                                        uncheckedThumbColor = Color.LightGray,
+                                        uncheckedTrackColor = Color.DarkGray
+                                    )
+                                )
+                            }
+                        }
+
+                        // New: Root Bypass / Cloaking Switch
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color.White.copy(alpha = 0.04f))
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Root Detection Cloak (Bypass)",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        text = "Hide rooted status from player scripts, checking resources and APIs.",
+                                        fontSize = 11.sp,
+                                        color = Color.Gray
+                                    )
+                                }
+                                Switch(
+                                    checked = rootCloakEnabled,
+                                    onCheckedChange = {
+                                        rootCloakEnabled = it
+                                        appSettings.rootCloakEnabled = it
+                                        webViewRef?.reload()
+                                    },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = activeAccentColor,
+                                        checkedTrackColor = activeAccentColor.copy(alpha = 0.4f),
+                                        uncheckedThumbColor = Color.LightGray,
+                                        uncheckedTrackColor = Color.DarkGray
+                                    )
+                                )
+                            }
+                        }
+
+                        // New: Developer Root Shell Console Option & Switch
+                        item {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color.White.copy(alpha = 0.04f))
+                                    .padding(12.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "SU Terminal Shell Utilities",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp,
+                                            color = Color.White
+                                        )
+                                        Text(
+                                            text = "Enable sandbox terminal shell environment. Executes root sub-commands.",
+                                            fontSize = 11.sp,
+                                            color = Color.Gray
+                                        )
+                                    }
+                                    Switch(
+                                        checked = rootAccessEnabled,
+                                        onCheckedChange = {
+                                            rootAccessEnabled = it
+                                            appSettings.rootAccessEnabled = it
+                                        },
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor = activeAccentColor,
+                                            checkedTrackColor = activeAccentColor.copy(alpha = 0.4f),
+                                            uncheckedThumbColor = Color.LightGray,
+                                            uncheckedTrackColor = Color.DarkGray
+                                        )
+                                    )
+                                }
+
+                                if (rootAccessEnabled) {
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    
+                                    // Live Root Status Label
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(Color.Black.copy(alpha = 0.25f), RoundedCornerShape(6.dp))
+                                            .padding(8.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(8.dp)
+                                                .clip(CircleShape)
+                                                .background(if (isSystemRooted) Color(0xFFFFD600) else Color(0xFF00C853))
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "SU Privileges: " + if (isSystemRooted) "Superuser access verified! (Device is Rooted)" else "Default/Sandbox mode. (No Root detected)",
+                                            fontSize = 11.sp,
+                                            color = Color.LightGray,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    // Console view
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(140.dp)
+                                            .background(Color.Black, RoundedCornerShape(8.dp))
+                                            .border(1.dp, Color.DarkGray, RoundedCornerShape(8.dp))
+                                            .padding(8.dp)
+                                    ) {
+                                        LazyColumn(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .weight(1f)
+                                        ) {
+                                            items(terminalOutputLines.size) { index ->
+                                                Text(
+                                                    text = terminalOutputLines[index],
+                                                    color = Color(0xFF00FF00),
+                                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                                    fontSize = 10.sp
+                                                )
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(4.dp))
+
+                                        // Command Input Row
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = if (isSystemRooted) "root#" else "user$",
+                                                color = Color.LightGray,
+                                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                                fontSize = 11.sp
+                                            )
+                                            OutlinedTextField(
+                                                value = terminalCommandInput,
+                                                onValueChange = { terminalCommandInput = it },
+                                                placeholder = { Text("whoami", fontSize = 10.sp, color = Color.DarkGray) },
+                                                modifier = Modifier.weight(1f).height(40.dp),
+                                                colors = OutlinedTextFieldDefaults.colors(
+                                                    focusedBorderColor = activeAccentColor,
+                                                    unfocusedBorderColor = Color.DarkGray,
+                                                    focusedTextColor = Color.White,
+                                                    unfocusedTextColor = Color.LightGray
+                                                ),
+                                                singleLine = true,
+                                                textStyle = androidx.compose.ui.text.TextStyle(
+                                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                                    fontSize = 10.sp
+                                                )
+                                            )
+                                            Button(
+                                                onClick = {
+                                                    val rawCmd = terminalCommandInput.trim()
+                                                    if (rawCmd.isNotEmpty()) {
+                                                        terminalOutputLines.add("> $rawCmd")
+                                                        try {
+                                                            val execArgs = if (isSystemRooted) {
+                                                                arrayOf("su", "-c", rawCmd)
+                                                            } else {
+                                                                rawCmd.split(" ").toTypedArray()
+                                                            }
+                                                            val process = Runtime.getRuntime().exec(execArgs)
+                                                            val reader = java.io.BufferedReader(java.io.InputStreamReader(process.inputStream))
+                                                            var line: String?
+                                                            var linesCount = 0
+                                                            while (reader.readLine().also { line = it } != null) {
+                                                                terminalOutputLines.add(line ?: "")
+                                                                linesCount++
+                                                                if (linesCount > 10) break
+                                                            }
+                                                            val errReader = java.io.BufferedReader(java.io.InputStreamReader(process.errorStream))
+                                                            var errLine: String?
+                                                            while (errReader.readLine().also { errLine = it } != null) {
+                                                                terminalOutputLines.add("[err] $errLine")
+                                                            }
+                                                        } catch (e: Exception) {
+                                                            terminalOutputLines.add("Exec Error: ${e.message}")
+                                                        }
+                                                        terminalCommandInput = ""
+                                                    }
+                                                },
+                                                modifier = Modifier.height(34.dp),
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = activeAccentColor
+                                                ),
+                                                contentPadding = PaddingValues(horizontal = 8.dp)
+                                            ) {
+                                                Text("Run", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
 

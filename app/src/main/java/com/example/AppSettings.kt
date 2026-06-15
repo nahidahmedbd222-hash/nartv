@@ -22,6 +22,18 @@ class AppSettings(context: Context) {
         get() = prefs.getInt("theme_accent_index", 0)
         set(value) = prefs.edit().putInt("theme_accent_index", value).apply()
 
+    var fullscreenModeEnabled: Boolean
+        get() = prefs.getBoolean("fullscreen_mode_enabled", false)
+        set(value) = prefs.edit().putBoolean("fullscreen_mode_enabled", value).apply()
+
+    var rootAccessEnabled: Boolean
+        get() = prefs.getBoolean("root_access_enabled", false)
+        set(value) = prefs.edit().putBoolean("root_access_enabled", value).apply()
+
+    var rootCloakEnabled: Boolean
+        get() = prefs.getBoolean("root_cloak_enabled", true)
+        set(value) = prefs.edit().putBoolean("root_cloak_enabled", value).apply()
+
     fun addCustomDomain(domain: String) {
         val current = customBlockedDomains.toMutableSet()
         current.add(domain.trim().lowercase())
