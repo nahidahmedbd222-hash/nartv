@@ -122,11 +122,17 @@ dependencies {
   "ksp"(libs.moshi.kotlin.codegen)
 }
 
-// Custom tasks to copy and export the compiled APK to .build-outputs and APK_DOWNLOAD directories as requested
+// Custom tasks to copy and export the compiled APK to .build-outputs, build-outputs, and APK_DOWNLOAD directories as requested
 tasks.register<Copy>("copyDebugApk") {
     val buildDir = layout.buildDirectory.get().asFile
     from(file("$buildDir/outputs/apk/debug/app-debug.apk"))
     into(rootProject.file(".build-outputs"))
+}
+
+tasks.register<Copy>("copyDebugApkToNoDotBuildOutputs") {
+    val buildDir = layout.buildDirectory.get().asFile
+    from(file("$buildDir/outputs/apk/debug/app-debug.apk"))
+    into(rootProject.file("build-outputs"))
 }
 
 tasks.register<Copy>("copyDebugApkToDownload") {
@@ -138,15 +144,20 @@ tasks.register<Copy>("copyDebugApkToDownload") {
 tasks.register("checkApkSize") {
     doLast {
         val downloadApk = rootProject.file("APK_DOWNLOAD/app-debug.apk")
-        val buildOutputsApk = rootProject.file(".build-outputs/app-debug.apk")
+        val dotBuildOutputsApk = rootProject.file(".build-outputs/app-debug.apk")
+        val noDotBuildOutputsApk = rootProject.file("build-outputs/app-debug.apk")
         println("VERIFICATION_RESULT: Download APK path: ${downloadApk.absolutePath}")
         println("VERIFICATION_RESULT: Download APK exists: ${downloadApk.exists()}")
         if (downloadApk.exists()) {
             println("VERIFICATION_RESULT: Download APK size: ${downloadApk.length()} bytes")
         }
-        println("VERIFICATION_RESULT: Build outputs APK exists: ${buildOutputsApk.exists()}")
-        if (buildOutputsApk.exists()) {
-            println("VERIFICATION_RESULT: Build outputs APK size: ${buildOutputsApk.length()} bytes")
+        println("VERIFICATION_RESULT: Dot Build outputs APK exists: ${dotBuildOutputsApk.exists()}")
+        if (dotBuildOutputsApk.exists()) {
+            println("VERIFICATION_RESULT: Dot Build outputs APK size: ${dotBuildOutputsApk.length()} bytes")
+        }
+        println("VERIFICATION_RESULT: No-Dot Build outputs APK exists: ${noDotBuildOutputsApk.exists()}")
+        if (noDotBuildOutputsApk.exists()) {
+            println("VERIFICATION_RESULT: No-Dot Build outputs APK size: ${noDotBuildOutputsApk.length()} bytes")
         }
     }
 }
@@ -171,6 +182,6 @@ tasks.named("preBuild") {
 }
 
 afterEvaluate {
-    tasks.findByName("assembleDebug")?.finalizedBy("copyDebugApk", "copyDebugApkToDownload")
+    tasks.findByName("assembleDebug")?.finalizedBy("copyDebugApk", "copyDebugApkToNoDotBuildOutputs", "copyDebugApkToDownload")
 }
 
