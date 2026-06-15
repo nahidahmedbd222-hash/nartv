@@ -105,13 +105,22 @@ object AdBlocker {
         "hotjar.com"
     )
 
-    fun isAdUrl(url: String): Boolean {
+    fun isAdUrl(url: String, customDomains: Set<String> = emptySet()): Boolean {
         val uri = try {
             Uri.parse(url)
         } catch (e: Exception) {
             return false
         }
         val host = uri.host?.lowercase() ?: return false
+
+        // Check custom user-defined blocklist
+        for (customDomain in customDomains) {
+            val trimmed = customDomain.trim().lowercase()
+            if (trimmed.isNotEmpty() && (host == trimmed || host.endsWith(".$trimmed"))) {
+                Log.d(TAG, "Blocked Ad (Custom Domain rule): $url")
+                return true
+            }
+        }
 
         // Check exact or subdomain domain match
         for (adDomain in AD_DOMAINS) {

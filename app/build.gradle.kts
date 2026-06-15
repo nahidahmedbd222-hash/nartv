@@ -119,3 +119,21 @@ dependencies {
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
 }
+
+// Custom tasks to copy and export the compiled APK to .build-outputs and APK_DOWNLOAD directories as requested
+tasks.register<Copy>("copyDebugApk") {
+    val buildDir = layout.buildDirectory.get().asFile
+    from(file("$buildDir/outputs/apk/debug/app-debug.apk"))
+    into(rootProject.file(".build-outputs"))
+}
+
+tasks.register<Copy>("copyDebugApkToDownload") {
+    val buildDir = layout.buildDirectory.get().asFile
+    from(file("$buildDir/outputs/apk/debug/app-debug.apk"))
+    into(rootProject.file("APK_DOWNLOAD"))
+}
+
+afterEvaluate {
+    tasks.findByName("assembleDebug")?.finalizedBy("copyDebugApk", "copyDebugApkToDownload")
+}
+
