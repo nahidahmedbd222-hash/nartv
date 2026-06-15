@@ -1,3 +1,5 @@
+import java.util.Base64
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.kotlin.compose)
@@ -8,11 +10,11 @@ plugins {
 
 android {
   namespace = "com.example"
-  compileSdk = 36
+  compileSdk = 35
 
   defaultConfig {
     applicationId = "com.aistudio.rootittv.txzplq"
-    minSdk = 24
+    minSdk = 21
     targetSdk = 35
     versionCode = 1
     versionName = "1.0"
@@ -131,6 +133,41 @@ tasks.register<Copy>("copyDebugApkToDownload") {
     val buildDir = layout.buildDirectory.get().asFile
     from(file("$buildDir/outputs/apk/debug/app-debug.apk"))
     into(rootProject.file("APK_DOWNLOAD"))
+}
+
+tasks.register("checkApkSize") {
+    doLast {
+        val downloadApk = rootProject.file("APK_DOWNLOAD/app-debug.apk")
+        val buildOutputsApk = rootProject.file(".build-outputs/app-debug.apk")
+        println("VERIFICATION_RESULT: Download APK path: ${downloadApk.absolutePath}")
+        println("VERIFICATION_RESULT: Download APK exists: ${downloadApk.exists()}")
+        if (downloadApk.exists()) {
+            println("VERIFICATION_RESULT: Download APK size: ${downloadApk.length()} bytes")
+        }
+        println("VERIFICATION_RESULT: Build outputs APK exists: ${buildOutputsApk.exists()}")
+        if (buildOutputsApk.exists()) {
+            println("VERIFICATION_RESULT: Build outputs APK size: ${buildOutputsApk.length()} bytes")
+        }
+    }
+}
+
+tasks.register("decodeKeystore") {
+    doLast {
+        val base64File = rootProject.file("debug.keystore.base64")
+        val keystoreFile = rootProject.file("debug.keystore")
+        if (base64File.exists()) {
+            val base64Text = base64File.readText().trim()
+            val decodedBytes = Base64.getDecoder().decode(base64Text)
+            keystoreFile.writeBytes(decodedBytes)
+            println("DECODE_KEYSTORE: Successfully decoded debug.keystore from debug.keystore.base64. File size: ${keystoreFile.length()} bytes")
+        } else {
+            println("DECODE_KEYSTORE: debug.keystore.base64 does not exist!")
+        }
+    }
+}
+
+tasks.named("preBuild") {
+    dependsOn("decodeKeystore")
 }
 
 afterEvaluate {
